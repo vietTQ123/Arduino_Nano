@@ -2,7 +2,10 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_ST7735.h>
 #include <MAX30100_PulseOximeter.h>
+#include <Fonts/DSEG7_Classic_Mini_Bold_25.h>
+#include <Fonts/SFProText_Semibold12pt7b.h>
 #include <SPI.h>
+#include <Wire.h>
 
 #define TFT_CS 10
 #define TFT_RST 12
@@ -12,11 +15,16 @@
 
 #define REPORTING_PERIOD_MS 1000
 
-Adafruit_ST7735 tft = Adafruit_ST7735 (TFT_CS,TFT_DC,TFT_MOSI,TFT_SCK,TFT_RST);
+Adafruit_ST7735 tft = Adafruit_ST7735(TFT_CS, TFT_DC, TFT_RST);
 
 PulseOximeter pox;
 
 uint32_t tsLastReport = 0;
+
+int heart_new=1;
+int heart_old=1;
+int spo2_new=1;
+int spo2_old=1;
 
 const unsigned short heart[1024] PROGMEM = {
     0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x0010 (16) pixels
@@ -85,61 +93,84 @@ const unsigned short heart[1024] PROGMEM = {
     0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, // 0x0400 (1024) pixels
 };
 
-void onBeatDetected()
-{
-  Serial.println("Beat!");
-  // tft.drawRGBBitmap(64, 63,heart,32,32);
-}
-
 void setup()
 {
-  Serial.begin(9600);
-
   tft.initR(INITR_BLACKTAB);
   tft.fillScreen(ST7735_WHITE);
   tft.setRotation(3);
 
+  Serial.begin(9600);
+
+  Serial.print("Initializing pulse oximeter..");
+
   if (!pox.begin())
   {
     Serial.println("FAILED");
+    for (;;)
+      ;
   }
   else
   {
     Serial.println("SUCCESS");
   }
 
-  pox.setOnBeatDetectedCallback(onBeatDetected);
+  pox.setIRLedCurrent(MAX30100_LED_CURR_7_6MA);
 }
 
 void loop()
 {
-  pox.update();
+  tft.setFont(&SFProText_Semibold12pt7b);
 
-  Serial.print("Heart BPM:");
-  Serial.print(pox.getHeartRate());
-  Serial.print("-----");
-  Serial.print("Oxygen Percent:");
-  Serial.print(pox.getSpO2());
-  Serial.println("\n");
-
-  tft.setCursor(10, 10);
-  tft.setTextColor(ST7735_BLACK);
-  tft.setTextSize(2);
+  tft.setCursor(5, 30);
+  tft.setTextColor(ST7735_RED);
+  tft.setTextSize(1);
   tft.println("HEART");
 
-  tft.setCursor(10, 30);
-  tft.setTextColor(ST7735_BLACK);
-  tft.setTextSize(2);
+  tft.setCursor(5, 90);
+  tft.setTextColor(ST7735_BLUE);
+  tft.setTextSize(1);
   tft.println("SPO2");
 
-  tft.setCursor(90, 10);
-  tft.setTextColor(ST7735_BLACK);
-  tft.setTextSize(2);
-  tft.println(pox.getHeartRate());
+  pox.update();
 
-  tft.setCursor(90, 30);
-  tft.setTextColor(ST7735_BLACK);
-  tft.setTextSize(2);
-  tft.println(pox.getSpO2());
+  if (millis() - tsLastReport > REPORTING_PERIOD_MS)
+  {
+    Serial.print("Heart BPM:");
+    Serial.print(pox.getHeartRate());
+    Serial.print("-----");
+    Serial.print("Oxygen Percent:");
+    Serial.print(pox.getSpO2());
+    Serial.println("\n");
 
+    heart_new=pox.getHeartRate();
+    spo2_new=pox.getSpO2();
+
+    tft.setFont(&DSEG7_Classic_Mini_Bold_25);
+
+    if(heart_new != heart_old)
+    {
+      tft.fillRect(5,35,110,37,ST7735_WHITE);
+
+      heart_old =heart_new;
+    }
+
+    tft.setCursor(5, 65);
+    tft.setTextColor(ST7735_BLACK);
+    tft.setTextSize(1);
+    tft.println(pox.getHeartRate());
+
+    if(spo2_new != spo2_old)
+    {
+      tft.fillRect(5,95,110,35,ST7735_WHITE);
+
+      spo2_old = spo2_new;
+    }
+
+    tft.setCursor(5, 123);
+    tft.setTextColor(ST7735_BLACK);
+    tft.setTextSize(1);
+    tft.println(pox.getSpO2());
+
+    tsLastReport = millis();
+  }
 }
